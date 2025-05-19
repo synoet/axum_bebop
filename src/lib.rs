@@ -1,5 +1,5 @@
+use async_trait::async_trait;
 use axum::{
-    extract::{FromRequest, OptionalFromRequest},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::IntoResponse,
 };
@@ -18,6 +18,7 @@ fn octet_content_type(header_map: &HeaderMap) -> bool {
 
 pub struct Bebop<T: bebop::OwnedRecord>(pub T);
 
+#[async_trait]
 impl<T, S> axum::extract::FromRequest<S> for Bebop<T>
 where
     T: bebop::OwnedRecord + Send + Sync,
@@ -52,43 +53,6 @@ where
         })?;
 
         Ok(Bebop(value))
-    }
-}
-
-impl<T, S> OptionalFromRequest<S> for Bebop<T>
-where
-    T: bebop::OwnedRecord + Send + Sync,
-    S: Send + Sync,
-{
-    type Rejection = BebopRejection;
-
-    async fn from_request(
-        req: axum::extract::Request,
-        state: &S,
-    ) -> Result<Option<Self>, Self::Rejection> {
-        if !octet_content_type(req.headers()) {
-            return Ok(None);
-        }
-
-        let bytes = axum::body::Bytes::from_request(req, state)
-            .await
-            .map_err(|_| {
-                (
-                    axum::http::StatusCode::BAD_REQUEST,
-                    "body should be octet stream".to_string(),
-                )
-            })?;
-
-        let bytes = bytes.to_vec().clone();
-
-        let value = T::deserialize(bytes.as_slice()).map_err(|e| {
-            (
-                axum::http::StatusCode::BAD_REQUEST,
-                format!("Bebop deserialization error: {:?}", e),
-            )
-        })?;
-
-        Ok(Some(Bebop(value)))
     }
 }
 
